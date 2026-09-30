@@ -22,6 +22,9 @@ Base revision: `c7d631c658feefc851eb7af5b93aa5754430faf5` (`main`, branch `spong
 ## Revision log
 
 - **2026-09-30, initial draft.**
+- **2026-09-30.** The user asked how hyperdiffusion is implemented, then: "Please also consider
+  the option of implementing the sponge as a callback". Added *Alternatives considered*, which
+  compares the forcing with a diffusion-slot variant and a callback variant.
 
 ## Problem description
 
@@ -94,6 +97,75 @@ and divergence**, at all wavenumbers, **excluding the zonal mean (m = 0)** by de
   Rayleigh including the zonal mean" (`damp_zonal_mean = true`) one keyword away. We can then
   settle the open question with experiments (see *Testing and verification*) instead of in
   advance.
+
+### Alternatives considered: forcing, diffusion slot or callback
+
+**Order of one time step** (`time_step!` in `time_stepping/time_integration.jl`, Leapfrog with
+the semi-implicit scheme):
+
+```
+reset_tendencies!                 # all tendencies → 0
+parameterization_tendencies!      # physics (grid space)
+dynamics_tendencies!              # forcing!, drag!  → then the dynamical core, transform to spectral
+diffusion_and_implicit!           # implicit_correction!, then horizontal_diffusion!
+update_prognostic!                # leapfrog + Robert/Williams filter
+transform!                        # new spectral state → grid variables used by the next step
+output!
+callback!(model.callbacks, …)     # ← callbacks run here, after everything
+```
+
+**A. `AbstractForcing` (proposed).** It adds −r·ψ to the spectral tendency inside
+`dynamics_tendencies!`, so it runs before the tendency is complete.
+
+- It must be explicit: evaluated at the lagged leapfrog step, stable for τ > Δt.
+- It is a normal tendency term, so it appears in the tendencies. It works with the semi-implicit
+  solver and the Robert/Williams filter like any other forcing, and it is `@parameterized`.
+- Skipping m = 0 is trivial.
+- It needs the NamedTuple `forcing!` method so it can be combined with `HeldSuarez`.
+
+**B. Diffusion slot (a subtype of `AbstractHorizontalDiffusion`, or an extension of
+`HyperDiffusion`).** A Rayleigh sponge is diffusion with power 0: its rate does not depend on l.
+Diffusion runs once the tendency is complete, so it can be implicit via the `expl`/`impl`
+tables (`tend = (tend + expl·ψ)·impl`), which is unconditionally stable.
+
+- The tables are indexed by degree l only. Eddies-only needs a per-m mask in the kernel.
+- It occupies the slot of `HyperDiffusion`, so it would have to wrap or extend it rather than
+  sit next to it. That couples two separate concerns: scale-selective numerical diffusion and a
+  physical sponge.
+- This is the fallback if time scales close to Δt are ever needed.
+
+**C. Callback (`AbstractCallback`).** `callback!(callback, vars, model)` is called after the
+full time step. The docs (`docs/src/callbacks.md`) describe callbacks as mainly diagnostic, and
+any tendency written there is zeroed by `reset_tendencies!` before it is used. A callback
+sponge would therefore have to be an **operator-split filter on the prognostic state**: it
+multiplies the spectral vorticity and divergence of the newest leapfrog level, for m > 0 in
+the sponge layers, by an exact damping factor `exp(−2rΔt)`. Since ψⁿ⁺¹ = ψⁿ⁻¹ + 2Δt·F, this
+damps both leapfrog chains at the rate r.
+
+- Pros:
+  - Unconditionally stable and exact for any time scale.
+  - Needs **no changes to the package core**: no NamedTuple forcing, and it can live in a
+    user script.
+  - Combines trivially with `HeldSuarez`, since `model.callbacks` is a dictionary.
+  - Can be added or removed during a run with `add!`/`delete!`, and scheduled with `Schedule`.
+- Cons:
+  - **The grid state becomes stale.** `transform!` has already turned the undamped spectral
+    state into the grid u, v, ζ, D, and the next step computes its nonlinear tendencies from
+    those grid fields. Keeping them consistent means transforming vorticity and divergence
+    again (at least for the sponge layers) inside the callback. That costs extra and depends
+    on the `transform!` internals.
+  - `output!` runs before `callback!`, so the output shows the state one filter application
+    behind.
+  - The damping bypasses the tendencies and the Robert/Williams filter, and the docs warn that
+    editing spectral prognostic variables directly "can easily lead to stability issues".
+  - It is not a model component in the forcing/drag sense: it is not `@parameterized`, is not
+    shown with the model, and callbacks sit outside the Reactant/Enzyme-traced time step.
+
+**Recommendation.** Keep **A** as the implementation. Sponge time scales of hours to days are
+well inside the explicit stability limit (2Δt/τ ≈ 0.06 for τ = 1 day at T31). **C** is still
+useful as a cheap *prototype*: a script-level callback could test the reflection experiment
+before any package code changes. It is not a good final design because of the stale grid
+state. Keep **B** for very short time scales.
 
 ## Summary of changes
 
@@ -261,3 +333,5 @@ is already on the device.
 3. OK to add NamedTuple support for `model.forcing` so the sponge can be combined with
    `HeldSuarez`?
 4. Should damping of temperature eddies be part of this change or left as future work?
+5. Implementation route: forcing (A, recommended), diffusion slot (B) or callback (C)? And
+   should a callback prototype (C) be written first to run the reflection experiment?
