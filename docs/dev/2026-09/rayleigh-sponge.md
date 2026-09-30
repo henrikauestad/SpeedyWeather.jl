@@ -1,6 +1,6 @@
 # Rayleigh sponge layer at the model top as an `AbstractForcing`
 
-> Status: **planned**. Draft for review; the design questions at the end need sign-off before implementation starts.
+> Status: **in progress**. `RayleighSponge` is implemented as a forcing with unit tests; the first reflection experiment (T31L30) is inconclusive because Held–Suarez does not produce vertically propagating planetary waves.
 
 Date of initial draft: 2026-09-30
 
@@ -25,6 +25,21 @@ Base revision: `c7d631c658feefc851eb7af5b93aa5754430faf5` (`main`, branch `spong
 - **2026-09-30.** The user asked how hyperdiffusion is implemented, then: "Please also consider
   the option of implementing the sponge as a callback". Added *Alternatives considered*, which
   compares the forcing with a diffusion-slot variant and a callback variant.
+- **2026-09-30.** The user chose: "Write it as a forcing, please. Do the test described, and plot the
+  output", then "please run the tests also with T127N48 (primitivedrymodel) as well as a courser
+  primitivewetmodel". Implemented route A with the recommended defaults (eddies only,
+  `sigma = 0.2`, 1 day, no temperature damping). While implementing:
+  - `which_prognostic_step` for the sponge lives in `leapfrog.jl`, because `AbstractLeapfrog`
+    is defined after `forcing.jl`.
+  - The simulation tests cover T31L8 dry, T127L48 dry and T23L8 wet. The new convention is
+    `truncation = T + 1`, so T127 is `truncation = 128`.
+  - 48 equally spaced layers are unstable with the default time step at T31, T63 and T127,
+    also without any forcing (a pre-existing issue from the thin top layers). T127L48 needs
+    `Δt_at_T32 = Minute(10)`, i.e. Δt = 150 s.
+  - Reflection experiment: `../experiments/reflection.jl` (outside the repo). T31, 30
+    log-pressure spaced layers up to σ = 0.002, Held–Suarez plus a 3 km wave-2 mountain
+    at 25–65˚N, sponge from σ = 0.02 with a 1-day time scale, Δt = 20 min, 400 days with
+    100 days of spin-up. The results are in the *Results* section.
 
 ## Problem description
 
@@ -293,6 +308,27 @@ is already on the device.
   - zonal-mean u and T below the sponge. The differences between (b) and (d) show the
     Shepherd et al. spurious downward influence.
 - The video scripts in `../video` can be reused for visual checks.
+
+## Results
+
+T31L30 reflection experiment (`experiments/reflection_dry_T31L30.png`):
+
+- **Below the sponge, the stationary wave-2 amplitude, phase and eddy heat flux are almost
+  identical in all four setups.** The wave peaks at about 11 km and decays above. Its phase is
+  nearly vertical from 5 to 30 km, and the heat flux is close to 0 above 25 km. The wave is
+  evanescent in the Held–Suarez stratosphere, where ū is weak or easterly at 60˚N. Very
+  little wave activity reaches the lid, so there is little to reflect, and this setup cannot
+  discriminate between the options.
+- **The zonal mean shows the expected differences:**
+  - `full − eddy`: more than +10 m/s everywhere above about 22 km. The zonal-mean sponge
+    relaxes the upper-level easterlies to 0, and its influence reaches below the sponge
+    (dashed line) to about 20 km in the tropics. This is the Shepherd et al. spurious
+    downward influence.
+  - `eddy − none`: up to +10 m/s in the tropics above 30 km. Damping the eddies removes the
+    eddy forcing that maintains the upper-level tropical easterlies.
+  - `div − eddy`: div-only stays close to no sponge.
+- **Next step:** repeat with a stratosphere that allows vertical propagation, i.e. a winter
+  polar vortex with westerlies, e.g. a Polvani & Kushner (2002)-type equilibrium temperature.
 
 ## Documentation changes
 
