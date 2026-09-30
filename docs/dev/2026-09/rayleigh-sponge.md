@@ -1,6 +1,6 @@
 # Rayleigh sponge layer at the model top as an `AbstractForcing`
 
-> Status: **in progress**. `RayleighSponge` is implemented as a forcing with unit tests; the first reflection experiment (T31L30) is inconclusive because Held–Suarez does not produce vertically propagating planetary waves.
+> Status: **in progress**. `RayleighSponge` is implemented as a forcing with unit tests; the reflection experiment with a Polvani–Kushner winter vortex supports the default (vorticity + divergence, eddies only).
 
 Date of initial draft: 2026-09-30
 
@@ -330,6 +330,34 @@ T31L30 reflection experiment (`experiments/reflection_dry_T31L30.png`):
 - **Next step:** repeat with a stratosphere that allows vertical propagation, i.e. a winter
   polar vortex with westerlies, e.g. a Polvani & Kushner (2002)-type equilibrium temperature.
 
+**Polvani–Kushner-style experiment** (`STRAT=pk`, `experiments/reflection_dry_pk_T31L30.png`):
+
+- **Setup:** Held–Suarez in the troposphere with ε = 10 K (NH winter). Above 100 hPa, the US
+  standard atmosphere is blended poleward of 50˚N (width 10˚) with a polar vortex of lapse
+  rate γ = 4 K/km, relaxed at the Held–Suarez rates. This is defined in the experiment
+  script, not in the package. The runs used the same levels, mountain, sponge and length as
+  before.
+- **The winter vortex forms:** ū exceeds 40 m/s at 60–80˚N above about 25 km.
+- **No sponge:** the stationary wave-2 at 61˚N has a minimum near 27 km and then grows to
+  28 m/s at the lid, with the eddy heat flux peaking at 40 km. This is consistent with wave
+  activity piling up and being reflected at the lid.
+- **Divergence only is almost identical to no sponge:** 28 m/s at the lid and a similar heat
+  flux. It does not absorb planetary waves, which are rotational.
+- **The default (vorticity + divergence, eddies only) absorbs the wave:** the amplitude
+  stays at about 13 m/s at the lid instead of 28, and the heat flux aloft is reduced.
+  - Below the sponge, the change in ū (eddy − none) is small, a few m/s.
+  - In the sponge, the NH vortex is up to 10 m/s weaker. This is the expected drag from
+    absorbing the waves there: their momentum is deposited inside the domain.
+- **Including the zonal mean destroys the upper vortex:** full − eddy is below −10 m/s
+  at 50–90˚N above 27 km and more than +10 m/s in the tropics, reaching down to about 15 km.
+  The waves no longer propagate up, the heat flux is the weakest of all setups, and the
+  spurious downward influence is the largest.
+- **Caveats:**
+  - These are single 300-day means at T31L30, so internal variability is not quantified.
+  - Some growth of the amplitude with height is expected from e^{z/2H} even without
+    reflection.
+  - The phase diagnostic is noisy in the sponge.
+
 ## Documentation changes
 
 - The docstring for `RayleighSponge`.
@@ -371,3 +399,4 @@ T31L30 reflection experiment (`experiments/reflection_dry_T31L30.png`):
 4. Should damping of temperature eddies be part of this change or left as future work?
 5. Implementation route: forcing (A, recommended), diffusion slot (B) or callback (C)? And
    should a callback prototype (C) be written first to run the reflection experiment?
+   **Decided: A (forcing).**
