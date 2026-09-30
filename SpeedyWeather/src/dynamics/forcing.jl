@@ -6,6 +6,17 @@ forcing!(vars::Variables, model::AbstractModel) = forcing!(vars, model.forcing, 
 # NO FORCING
 forcing!(vars, forcing::Nothing, args...) = nothing
 
+# SEVERAL FORCINGS as NamedTuple, e.g. forcing = (held_suarez = HeldSuarez(SG), sponge = RayleighSponge(SG))
+# unrolled recursion over the forcings instead of iterating over a Union-typed collection
+forcing!(vars::Variables, forcings::NamedTuple, model::AbstractModel) =
+    _forcing_unrolled!(vars, values(forcings), model)
+@inline _forcing_unrolled!(vars, ::Tuple{}, model) = nothing
+@inline function _forcing_unrolled!(vars, forcings::Tuple, model)
+    forcing!(vars, first(forcings), model)
+    _forcing_unrolled!(vars, Base.tail(forcings), model)
+    return nothing
+end
+
 # JET STREAM FORCING
 export JetStreamForcing
 

@@ -96,6 +96,27 @@ nothing # hide
 ```
 ![Held-Suarez](heldsuarez.png)
 
+### Sponge layer
+
+Waves propagating upward reflect at the model top (σ = 0). A [`RayleighSponge`](@ref) absorbs
+them in the top layers by damping vorticity and divergence linearly at all wavenumbers,
+with a rate increasing from 0 at σ = `sigma` to `1/time_scale` at σ = 0 (sin² profile).
+By default the zonal mean (order m = 0) is not damped: a zonal-mean sponge violates angular
+momentum conservation and causes spurious downward influence [Shepherd1996, Shepherd2004](@citep).
+Several forcings can be combined in a `NamedTuple`
+
+```@example heldsuarez
+forcing = (held_suarez = HeldSuarez(spectral_grid), sponge = RayleighSponge(spectral_grid, sigma = 0.1))
+model = PrimitiveDryModel(spectral_grid; forcing, drag = LinearDrag(spectral_grid), dynamics_only = true)
+simulation = initialize!(model)
+run!(simulation, period = Day(5))
+nothing # hide
+```
+
+Use `damp_vorticity = false` to damp only the divergence (the vertical velocity) and
+`damp_zonal_mean = true` for a classic Rayleigh friction sponge on the full flow.
+A sponge is only useful with several layers near the model top.
+
 ## Aquaplanet
 
 ```@example aquaplanet

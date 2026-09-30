@@ -145,6 +145,7 @@ include("variables/set.jl")
 
 # MODEL COMPONENTS
 include("dynamics/forcing.jl")
+include("dynamics/sponge.jl")
 include("dynamics/drag.jl")
 include("dynamics/geopotential.jl")
 include("dynamics/virtual_temperature.jl")

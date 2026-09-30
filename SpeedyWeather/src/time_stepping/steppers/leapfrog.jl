@@ -44,6 +44,9 @@ tendency_steps(::AbstractLeapfrog) = 1
 @inline which_prognostic_step(var::AbstractField, ::AbstractLeapfrog, ::SpeedyTransforms.AbstractSpectralTransform, ::TwoDModels) = 1
 @inline which_prognostic_step(var, ::AbstractLeapfrog, ::AbstractForcing) = 2
 @inline which_prognostic_step(var, ::AbstractLeapfrog, ::AbstractDrag) = 2
+# but the Rayleigh sponge is evaluated at the previous (lagged) step, forward in time over 2Δt,
+# as a damping term at the centred step is unstable for the computational mode of leapfrog
+@inline which_prognostic_step(var, ::AbstractLeapfrog, ::RayleighSponge) = 1
 
 # in Leapfrog use the current (=2nd) in the dynamical core
 @inline which_prognostic_step(var, ::AbstractLeapfrog, ::AbstractDynamicalCoreComponent) = 2
